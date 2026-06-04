@@ -1,0 +1,15 @@
+# 개인/내부 문서 — 공개 배포 제외 (파일은 로컬 유지)
+priavte.md
+작성가이드.md
+DESIGN.md
+
+# 수상 원본(영문명 사본이 assets/awards에 이미 있음) — 중복 제외
+박인석 - 수상자료/
+
+# 미사용 이미지 — 용량만 차지
+assets/images/hero-biomechanics.png
+assets/images/sprinter-pose.jpg
+
+# 시스템 파일
+.DS_Store
+**/.DS_Store

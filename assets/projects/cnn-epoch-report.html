@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Epoch 학습에 따른 Loss와 Test Accuracy의 관계</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #faf8f5;
+    --bg2:      #f2efe9;
+    --ink:      #1a1714;
+    --ink2:     #4a453f;
+    --ink3:     #9a9088;
+    --rule:     #ddd8cf;
+    --loss:     #c0392b;
+    --loss-bg:  rgba(192,57,43,0.08);
+    --acc:      #1a6b3c;
+    --acc-bg:   rgba(26,107,60,0.08);
+    --gold:     #b8860b;
+    --gold-bg:  rgba(184,134,11,0.09);
+  }
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 300;
+    line-height: 1.8;
+  }
+  .top-rule {
+    height: 4px;
+    background: linear-gradient(90deg, var(--loss) 0%, var(--gold) 50%, var(--acc) 100%);
+  }
+  header {
+    padding: 64px 0 52px;
+    border-bottom: 1px solid var(--rule);
+    text-align: center;
+  }
+  .header-inner { max-width: 780px; margin: 0 auto; padding: 0 32px; }
+  .report-kicker {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 22px;
+  }
+  h1 {
+    font-size: clamp(24px, 4vw, 40px);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    margin-bottom: 24px;
+  }
+  h1 .accent-loss { color: var(--loss); }
+  h1 .accent-acc  { color: var(--acc); }
+  .header-desc {
+    font-size: 15px;
+    color: var(--ink2);
+    line-height: 1.85;
+    max-width: 580px;
+    margin: 0 auto;
+  }
+  .page { max-width: 860px; margin: 0 auto; padding: 0 32px; }
+  section { padding: 56px 0; border-bottom: 1px solid var(--rule); }
+  section:last-of-type { border-bottom: none; }
+  .sec-kicker {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .sec-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 32px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  /* 실험 설정 */
+  .setup-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  @media(max-width:640px){ .setup-grid{ grid-template-columns: repeat(2,1fr); } }
+  .setup-cell {
+    background: var(--bg);
+    padding: 18px 16px;
+    text-align: center;
+  }
+  .setup-cell .sc-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--ink3);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .setup-cell .sc-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .setup-cell .sc-val.mono { font-family: 'IBM Plex Mono', monospace; font-size: 20px; }
+  .aug-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--acc);
+    color: var(--acc);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 3px;
+  }
+  .aug-badge::before {
+    content: '✓';
+    display: inline-block;
+    width: 16px; height: 16px;
+    background: var(--acc);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 10px;
+    text-align: center;
+    line-height: 16px;
+  }
+  /* 개념 */
+  .concept-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  @media(max-width:600px){ .concept-row{ grid-template-columns:1fr; } }
+  .concept-box { border-radius: 6px; padding: 22px 24px; }
+  .concept-box.loss-box { background: var(--loss-bg); border-left: 3px solid var(--loss); }
+  .concept-box.acc-box  { background: var(--acc-bg);  border-left: 3px solid var(--acc);  }
+  .concept-box .cb-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cb-icon {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+  .loss-icon { background: var(--loss); color: #fff; }
+  .acc-icon  { background: var(--acc);  color: #fff; }
+  .concept-box p { font-size: 13.5px; color: var(--ink2); line-height: 1.75; }
+  .concept-box .cb-goal {
+    margin-top: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .loss-box .cb-goal { background: var(--loss); color: #fff; }
+  .acc-box  .cb-goal { background: var(--acc);  color: #fff; }
+  .info-note {
+    font-size: 13.5px;
+    color: var(--ink2);
+    line-height: 1.85;
+    padding: 16px 20px;
+    background: var(--bg2);
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+  }
+  /* 차트 */
+  .chart-wrap {
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 28px 24px 20px;
+    margin-bottom: 16px;
+  }
+  .chart-wrap h3 { font-size: 13px; font-weight: 600; color: var(--ink2); margin-bottom: 4px; }
+  .chart-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--ink3);
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+  }
+  .canvas-box { position: relative; height: 280px; }
+  .chart-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:650px){ .chart-two{ grid-template-columns:1fr; } }
+  /* 테이블 */
+  .table-outer { border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead tr { background: var(--bg2); }
+  thead th {
+    padding: 12px 20px;
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--ink3);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--rule);
+    font-weight: 400;
+  }
+  tbody tr { border-bottom: 1px solid var(--rule); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg2); }
+  tbody td { padding: 13px 20px; }
+  td.ep   { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--ink3); }
+  td.loss { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--loss); }
+  td.acc  { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--acc);  }
+  td.note { font-size: 12.5px; color: var(--ink2); }
+  tr.best-row { background: rgba(26,107,60,0.06); }
+  /* 관찰 */
+  .obs-list { display: flex; flex-direction: column; gap: 0; }
+  .obs-item {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 20px;
+    align-items: start;
+    padding: 28px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .obs-item:last-of-type { border-bottom: none; }
+  .obs-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--rule);
+    line-height: 1;
+    padding-top: 4px;
+    text-align: right;
+  }
+  .obs-body strong {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+  .obs-body p { font-size: 14px; color: var(--ink2); line-height: 1.85; }
+  .anomaly-box {
+    margin-top: 32px;
+    background: var(--gold-bg);
+    border: 1px solid rgba(184,134,11,0.25);
+    border-left: 3px solid var(--gold);
+    border-radius: 6px;
+    padding: 22px 26px;
+  }
+  .anomaly-box .ab-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+  .anomaly-box p { font-size: 13.5px; color: var(--ink2); line-height: 1.85; }
+  .hl-loss { color: var(--loss); font-weight: 600; }
+  .hl-acc  { color: var(--acc);  font-weight: 600; }
+  .hl-gold { color: var(--gold); font-weight: 600; }
+  /* 과적합 */
+  .overfit-box {
+    background: var(--bg2);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 28px 32px;
+  }
+  .overfit-box h3 { font-size: 17px; font-weight: 700; margin-bottom: 14px; }
+  .overfit-box p { font-size: 14px; color: var(--ink2); line-height: 1.85; margin-bottom: 12px; }
+  .overfit-box p:last-child { margin-bottom: 0; color: var(--ink3); font-size: 13px; }
+  /* 결론 */
+  .conclusion-box { border-top: 2px solid var(--ink); padding-top: 32px; }
+  .conclusion-box h3 { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+  .conclusion-box p { font-size: 14.5px; color: var(--ink2); line-height: 1.9; margin-bottom: 14px; }
+  .conclusion-box p:last-child { margin-bottom: 0; }
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: 28px 32px;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink3);
+    letter-spacing: 0.5px;
+  }
+  .reveal { opacity:0; transform:translateY(20px); animation: revealUp 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
+  @keyframes revealUp { to { opacity:1; transform:translateY(0); } }
+  .d1{animation-delay:0.05s} .d2{animation-delay:0.15s} .d3{animation-delay:0.25s}
+  .d4{animation-delay:0.35s} .d5{animation-delay:0.45s} .d6{animation-delay:0.55s}
+</style>
+</head>
+<body>
+
+<div class="top-rule"></div>
+
+<header class="reveal d1">
+  <div class="header-inner">
+    <div class="report-kicker">CNN Layer Lab · 실험 리포트</div>
+    <h1>Epoch 학습에 따른<br><span class="accent-loss">Loss</span>와 <span class="accent-acc">Test Accuracy</span>의 관계</h1>
+    <p class="header-desc">
+      MNIST 손글씨 숫자 데이터셋으로 CNN을 학습시키면서,
+      Epoch가 늘어날수록 손실(Loss)과 테스트 정확도(Accuracy)가
+      어떻게 변화하는지 직접 관찰한 실험입니다.
+    </p>
+  </div>
+</header>
+
+<div class="page">
+
+<!-- 실험 설정 -->
+<section class="reveal d2">
+  <div class="sec-kicker">Experiment Setup</div>
+  <div class="sec-title">실험 설정</div>
+  <div class="setup-grid">
+    <div class="setup-cell">
+      <div class="sc-label">데이터셋</div>
+      <div class="sc-val" style="font-size:14px;">MNIST 숫자<br><span style="font-size:11px;color:var(--ink3);">mix 50/50</span></div>
+    </div>
+    <div class="setup-cell">
+      <div class="sc-label">Conv 레이어</div>
+      <div class="sc-val mono">5개</div>
+    </div>
+    <div class="setup-cell">
+      <div class="sc-label">학습 샘플</div>
+      <div class="sc-val mono">2,048</div>
+    </div>
+    <div class="setup-cell">
+      <div class="sc-label">테스트 샘플</div>
+      <div class="sc-val mono">10,000</div>
+    </div>
+    <div class="setup-cell">
+      <div class="sc-label">목표 Epoch</div>
+      <div class="sc-val mono">100</div>
+    </div>
+  </div>
+  <div>
+    <span class="aug-badge">학습 Augmentation 적용</span>
+    <span style="font-size:12.5px; color:var(--ink3); margin-left:12px;">이미지를 무작위로 회전·이동하여 학습 데이터를 다양하게 만드는 기법</span>
+  </div>
+</section>
+
+<!-- 핵심 개념 -->
+<section class="reveal d3">
+  <div class="sec-kicker">Key Concepts</div>
+  <div class="sec-title">핵심 개념 — Loss와 Accuracy</div>
+  <div class="concept-row">
+    <div class="concept-box loss-box">
+      <div class="cb-title"><span class="cb-icon loss-icon">LOSS</span>손실 (Loss)</div>
+      <p>
+        모델의 예측이 정답과 <strong>얼마나 틀렸는지</strong>를 나타내는 숫자입니다.
+        문제를 풀고 나서 "몇 점이나 틀렸나"를 점수로 매긴 것과 같습니다.
+        학습이 잘 될수록 Loss는 점점 작아집니다.
+      </p>
+      <div class="cb-goal">목표: 0에 가까울수록 좋음</div>
+    </div>
+    <div class="concept-box acc-box">
+      <div class="cb-title"><span class="cb-icon acc-icon">ACC</span>정확도 (Accuracy)</div>
+      <p>
+        테스트 이미지 10,000장 중에서 <strong>몇 개를 맞게 예측했는지</strong>의 비율입니다.
+        문제집 100문제 중 몇 문제를 맞혔는지와 같은 개념입니다.
+        학습이 잘 될수록 Accuracy는 높아집니다.
+      </p>
+      <div class="cb-goal">목표: 100%에 가까울수록 좋음</div>
+    </div>
+  </div>
+  <p class="info-note">
+    <strong style="color:var(--ink);">두 지표의 관계:</strong>
+    일반적으로 Loss가 낮아지면 Accuracy는 높아집니다. 모델이 오답을 적게 낼수록 정답을 더 많이 맞히기 때문입니다.
+    단, 이번 실험에서 볼 수 있듯 <strong>항상 반드시 그런 것은 아닙니다.</strong>
+    Epoch마다 두 값이 동시에 좋아지지 않는 구간이 나타나기도 합니다.
+  </p>
+</section>
+
+<!-- 결과 그래프 -->
+<section class="reveal d4">
+  <div class="sec-kicker">Results · Visualization</div>
+  <div class="sec-title">실험 결과 그래프</div>
+  <div class="chart-two" style="margin-bottom:16px;">
+    <div class="chart-wrap">
+      <h3>Training Loss 변화</h3>
+      <div class="chart-sub">EPOCH 1 → 10 · 낮을수록 좋음</div>
+      <div class="canvas-box"><canvas id="lossChart"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <h3>Test Accuracy 변화</h3>
+      <div class="chart-sub">EPOCH 1 → 10 · 높을수록 좋음</div>
+      <div class="canvas-box"><canvas id="accChart"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <h3>Loss와 Accuracy 동시 비교</h3>
+    <div class="chart-sub">두 지표를 같은 그래프에 표시 (왼쪽 축: Loss, 오른쪽 축: Accuracy)</div>
+    <div class="canvas-box" style="height:300px;"><canvas id="dualChart"></canvas></div>
+  </div>
+</section>
+
+<!-- 수치 테이블 -->
+<section class="reveal d4">
+  <div class="sec-kicker">Data Table</div>
+  <div class="sec-title">Epoch별 실측 수치</div>
+  <div class="table-outer">
+    <table>
+      <thead>
+        <tr>
+          <th>Epoch</th>
+          <th>Loss</th>
+          <th>Test Accuracy</th>
+          <th>변화 메모</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="ep">01</td>
+          <td class="loss">2.2678</td>
+          <td class="acc">31.7%</td>
+          <td class="note">학습 시작. 아직 대부분 틀리는 단계</td>
+        </tr>
+        <tr>
+          <td class="ep">02</td>
+          <td class="loss">1.8738</td>
+          <td class="acc">59.9%</td>
+          <td class="note">Loss ↓ 0.394 / Acc ↑ 28.2%p — 가장 큰 단일 개선</td>
+        </tr>
+        <tr>
+          <td class="ep">03</td>
+          <td class="loss">1.6751</td>
+          <td class="acc">73.8%</td>
+          <td class="note">Loss ↓ 0.199 / Acc ↑ 13.9%p — 빠른 성장 지속</td>
+        </tr>
+        <tr>
+          <td class="ep">04</td>
+          <td class="loss">1.6376</td>
+          <td class="acc" style="color:var(--loss);">56.9%</td>
+          <td class="note" style="color:var(--loss);">⚠ Loss 감소했지만 Acc 오히려 하락</td>
+        </tr>
+        <tr>
+          <td class="ep">05</td>
+          <td class="loss" style="color:var(--gold);">1.9323</td>
+          <td class="acc">60.5%</td>
+          <td class="note" style="color:var(--gold);">⚠ Loss가 다시 증가 — 불안정 구간</td>
+        </tr>
+        <tr>
+          <td class="ep">06</td>
+          <td class="loss">1.8058</td>
+          <td class="acc">67.0%</td>
+          <td class="note">Loss ↓ / Acc ↑ 회복세</td>
+        </tr>
+        <tr>
+          <td class="ep">07</td>
+          <td class="loss" style="color:var(--gold);">1.9674</td>
+          <td class="acc">64.8%</td>
+          <td class="note" style="color:var(--gold);">⚠ Loss 재증가 / Acc 소폭 하락</td>
+        </tr>
+        <tr>
+          <td class="ep">08</td>
+          <td class="loss">1.6583</td>
+          <td class="acc">77.9%</td>
+          <td class="note">큰 폭 회복 — Loss ↓ / Acc ↑ 동시 개선</td>
+        </tr>
+        <tr>
+          <td class="ep">09</td>
+          <td class="loss">1.4982</td>
+          <td class="acc">77.0%</td>
+          <td class="note">Loss 최솟값 근접 / Acc 소폭 하락</td>
+        </tr>
+        <tr class="best-row">
+          <td class="ep">10</td>
+          <td class="loss">1.4821</td>
+          <td class="acc">84.5% ★</td>
+          <td class="note" style="color:var(--acc); font-weight:600;">Loss 최저 + Acc 최고 — 최고 성능</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:12px; color:var(--ink3); margin-top:10px; font-family:'IBM Plex Mono',monospace;">★ = 이번 실험에서 가장 좋은 결과 (Epoch 10)</p>
+</section>
+
+<!-- 관찰 -->
+<section class="reveal d5">
+  <div class="sec-kicker">Observations</div>
+  <div class="sec-title">관찰 내용</div>
+  <div class="obs-list">
+    <div class="obs-item">
+      <div class="obs-num">01</div>
+      <div class="obs-body">
+        <strong>전체적으로 Loss는 내려가고, Accuracy는 올라갔다</strong>
+        <p>
+          Epoch 1의 Loss <span class="hl-loss">2.2678</span>에서 Epoch 10의 <span class="hl-loss">1.4821</span>로 꾸준히 감소했고,
+          Accuracy는 <span class="hl-acc">31.7%</span>에서 <span class="hl-acc">84.5%</span>로 크게 상승했습니다.
+          학습을 반복할수록 모델이 숫자를 점점 더 잘 인식하게 된다는 것을 확인할 수 있습니다.
+        </p>
+      </div>
+    </div>
+    <div class="obs-item">
+      <div class="obs-num">02</div>
+      <div class="obs-body">
+        <strong>초반(Epoch 1→3)에 가장 급격하게 좋아졌다</strong>
+        <p>
+          Epoch 1에서 3까지 단 두 번의 학습 만에 Accuracy가 <span class="hl-acc">31.7% → 73.8%</span>로 42%p나 상승했습니다.
+          이는 모델이 처음에 숫자의 기본적인 형태(선, 곡선 등)를 빠르게 파악하기 때문입니다.
+          처음에 배울 것이 많을수록 개선 폭도 크게 나타납니다.
+        </p>
+      </div>
+    </div>
+    <div class="obs-item">
+      <div class="obs-num">03</div>
+      <div class="obs-body">
+        <strong>Loss와 Accuracy가 항상 같이 움직이지는 않았다</strong>
+        <p>
+          Epoch 4에서는 Loss가 줄었음에도 Accuracy가 <span class="hl-loss">73.8% → 56.9%</span>로 오히려 크게 떨어졌습니다.
+          또 Epoch 5와 7에서는 Loss가 다시 올라갔습니다.
+          이처럼 학습 초기에는 두 지표가 불규칙하게 움직이는 구간이 있을 수 있으며,
+          이는 모델이 아직 안정적인 패턴을 찾지 못한 상태이기 때문입니다.
+        </p>
+      </div>
+    </div>
+    <div class="obs-item">
+      <div class="obs-num">04</div>
+      <div class="obs-body">
+        <strong>후반(Epoch 8→10)에 다시 안정적으로 좋아졌다</strong>
+        <p>
+          불안정했던 중간 구간을 지나, Epoch 8~10에서는 Loss와 Accuracy가 함께 개선되며 안정적인 흐름을 보였습니다.
+          Epoch 10에서 Loss <span class="hl-loss">1.4821</span>, Accuracy <span class="hl-acc">84.5%</span>로 실험 중 가장 좋은 결과를 기록했습니다.
+          더 많은 Epoch를 학습한다면 계속 향상될 가능성이 있습니다.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="anomaly-box">
+    <div class="ab-title">⚠ 특이 구간 — Epoch 4~7</div>
+    <p>
+      Epoch 4에서 Loss는 줄었지만 Accuracy가 오히려 큰 폭으로 떨어졌고, Epoch 5와 7에서는 Loss가 다시 올라갔습니다.
+      이런 현상은 <span class="hl-gold">학습 초기에 모델의 가중치가 아직 불안정하게 조정되는 과정</span>에서 나타납니다.
+      학습 샘플이 2,048개로 적은 편이고, Augmentation으로 이미지를 매번 다르게 변형하기 때문에
+      모델이 보는 데이터가 Epoch마다 달라져 이런 진동이 더 두드러집니다.
+      Epoch를 더 늘리면 점차 안정화될 것으로 예상됩니다.
+    </p>
+  </div>
+</section>
+
+<!-- 과적합 -->
+<section class="reveal d5">
+  <div class="sec-kicker">Additional Note</div>
+  <div class="sec-title">주의할 점 — 과적합(Overfitting)</div>
+  <div class="overfit-box">
+    <h3>너무 많이 반복하면 오히려 나빠질 수 있다</h3>
+    <p>
+      Epoch를 아주 많이 늘리면 처음에는 계속 좋아지지만, 어느 순간부터 테스트 정확도가 오히려 떨어지는 현상이 생길 수 있습니다.
+      이것을 <strong>과적합(Overfitting)</strong>이라고 합니다.
+    </p>
+    <p>
+      비유하자면, 특정 문제집의 답만 외워버린 학생처럼 됩니다. 그 문제집(학습 데이터)에서는 100점이지만,
+      새로운 시험(테스트 데이터)에서는 오히려 성적이 나빠집니다.
+      이번 실험에서 Augmentation을 적용한 것도 이 과적합을 줄이기 위한 방법 중 하나입니다.
+    </p>
+    <p>
+      → 이 사이트에서 Epoch를 훨씬 더 많이 돌려보면, 학습 정확도는 계속 오르는데 테스트 정확도가 떨어지는 과적합 현상을 직접 확인할 수 있습니다.
+    </p>
+  </div>
+</section>
+
+<!-- 결론 -->
+<section class="reveal d6">
+  <div class="sec-kicker">Conclusion</div>
+  <div class="sec-title">결론</div>
+  <div class="conclusion-box">
+    <h3>이번 실험을 통해 확인한 것</h3>
+    <p>
+      Epoch를 늘릴수록 <span class="hl-loss">Loss는 전체적으로 감소</span>하고 <span class="hl-acc">Accuracy는 증가</span>하는 경향을 직접 확인했습니다.
+      특히 초반 3 Epoch 만에 Accuracy가 31.7%에서 73.8%로 급격히 오른 것은, CNN이 초반에 얼마나 빠르게 학습하는지를 잘 보여줍니다.
+    </p>
+    <p>
+      단, Epoch 4~7 구간처럼 <span class="hl-gold">두 지표가 항상 같은 방향으로 움직이지는 않습니다.</span>
+      Loss가 줄어도 Accuracy가 떨어지거나, Loss가 다시 올라가는 구간이 나타났습니다.
+      이는 학습 초기의 자연스러운 현상으로, Epoch를 더 늘리면 점차 안정될 것으로 보입니다.
+    </p>
+    <p>
+      Epoch 10 기준으로 Loss <span class="hl-loss">1.4821</span>, Accuracy <span class="hl-acc">84.5%</span>를 달성했습니다.
+      100 Epoch까지 계속 학습한다면 더 높은 정확도를 기대할 수 있지만,
+      너무 많이 반복하면 과적합이 발생할 수 있어 적절한 Epoch 수를 찾는 것이 중요합니다.
+    </p>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  CNN Layer Lab · MNIST 숫자 mix 50/50 · Conv 5층 · 학습 2,048 / 테스트 10,000 · Augmentation ON · Epoch 1–10 실측
+</footer>
+
+<script>
+const epochs   = [1,2,3,4,5,6,7,8,9,10];
+const lossVals = [2.2678,1.8738,1.6751,1.6376,1.9323,1.8058,1.9674,1.6583,1.4982,1.4821];
+const accVals  = [31.7,59.9,73.8,56.9,60.5,67.0,64.8,77.9,77.0,84.5];
+
+const gridColor = 'rgba(0,0,0,0.06)';
+const tickFont  = { family:"'IBM Plex Mono', monospace", size:10 };
+const tickStyle = { color:'#9a9088', font: tickFont };
+const tooltip   = {
+  backgroundColor:'#1a1714', titleColor:'#9a9088',
+  bodyColor:'#faf8f5', borderColor:'#ddd8cf', borderWidth:1,
+  padding:10, cornerRadius:4
+};
+
+// Loss 차트
+new Chart(document.getElementById('lossChart'), {
+  type:'line',
+  data:{
+    labels: epochs,
+    datasets:[{
+      data: lossVals,
+      borderColor:'#c0392b', borderWidth:2.5,
+      pointBackgroundColor: lossVals.map((v,i)=>{
+        if(i===4||i===6) return '#b8860b';
+        return '#c0392b';
+      }),
+      pointRadius:5, pointHoverRadius:7,
+      tension:0.3, fill:true,
+      backgroundColor:(ctx)=>{
+        const g=ctx.chart.ctx.createLinearGradient(0,0,0,280);
+        g.addColorStop(0,'rgba(192,57,43,0.15)');
+        g.addColorStop(1,'rgba(192,57,43,0)');
+        return g;
+      }
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false}, tooltip:{ ...tooltip, callbacks:{ label: c=>' Loss: '+c.parsed.y } } },
+    scales:{
+      x:{ grid:{color:gridColor}, ticks:tickStyle, title:{display:true,text:'Epoch',color:'#9a9088',font:{size:10}} },
+      y:{ grid:{color:gridColor}, ticks:tickStyle, min:1.2, max:2.4,
+          title:{display:true,text:'Loss',color:'#9a9088',font:{size:10}} }
+    }
+  }
+});
+
+// Accuracy 차트
+new Chart(document.getElementById('accChart'), {
+  type:'line',
+  data:{
+    labels: epochs,
+    datasets:[{
+      data: accVals,
+      borderColor:'#1a6b3c', borderWidth:2.5,
+      pointBackgroundColor: accVals.map((v,i)=>{
+        if(i===3||i===6) return '#c0392b';
+        return '#1a6b3c';
+      }),
+      pointRadius:5, pointHoverRadius:7,
+      tension:0.3, fill:true,
+      backgroundColor:(ctx)=>{
+        const g=ctx.chart.ctx.createLinearGradient(0,0,0,280);
+        g.addColorStop(0,'rgba(26,107,60,0.15)');
+        g.addColorStop(1,'rgba(26,107,60,0)');
+        return g;
+      }
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false}, tooltip:{ ...tooltip, callbacks:{ label: c=>' Accuracy: '+c.parsed.y+'%' } } },
+    scales:{
+      x:{ grid:{color:gridColor}, ticks:tickStyle, title:{display:true,text:'Epoch',color:'#9a9088',font:{size:10}} },
+      y:{ grid:{color:gridColor}, ticks:tickStyle, min:20, max:90,
+          title:{display:true,text:'Accuracy (%)',color:'#9a9088',font:{size:10}} }
+    }
+  }
+});
+
+// 듀얼 차트
+new Chart(document.getElementById('dualChart'), {
+  type:'line',
+  data:{
+    labels: epochs,
+    datasets:[
+      {
+        label:'Loss', data:lossVals,
+        borderColor:'#c0392b', borderWidth:2.5,
+        pointBackgroundColor:'#c0392b', pointRadius:5, pointHoverRadius:7,
+        tension:0.3, fill:false, yAxisID:'yLoss'
+      },
+      {
+        label:'Test Accuracy (%)', data:accVals,
+        borderColor:'#1a6b3c', borderWidth:2.5,
+        pointBackgroundColor:'#1a6b3c', pointRadius:5, pointHoverRadius:7,
+        tension:0.3, fill:false, yAxisID:'yAcc'
+      }
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:'index', intersect:false },
+    plugins:{
+      legend:{ display:true, labels:{ color:'#4a453f', font:{ family:"'IBM Plex Mono',monospace", size:11 }, boxWidth:14, padding:20 } },
+      tooltip
+    },
+    scales:{
+      x:{ grid:{color:gridColor}, ticks:tickStyle, title:{display:true,text:'Epoch',color:'#9a9088',font:{size:10}} },
+      yLoss:{ type:'linear', position:'left',  grid:{color:gridColor}, ticks:{...tickStyle,color:'#c0392b'}, min:1.2, max:2.4,
+              title:{display:true,text:'Loss',color:'#c0392b',font:{size:10}} },
+      yAcc: { type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{...tickStyle,color:'#1a6b3c'}, min:20, max:90,
+              title:{display:true,text:'Accuracy (%)',color:'#1a6b3c',font:{size:10}} }
+    }
+  }
+});
+</script>
+</body>
+</html>

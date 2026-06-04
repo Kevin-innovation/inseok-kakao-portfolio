@@ -1,0 +1,16 @@
+/* =========================================================================
+   FONTS — Pretendard (self-hosted variable woff2) + JetBrains Mono (code)
+   "폰트는 Pretendard 고정" — 본문/디스플레이 전부 Pretendard.
+   코드 블록만 가독성을 위해 JetBrains Mono(없으면 시스템 모노로 폴백).
+   ========================================================================= */
+
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;          /* 가변 축: Thin~Black 전부 포함 */
+  font-style: normal;
+  font-display: swap;           /* 폰트 로드 전 폴백으로 즉시 렌더 → CLS 방지 */
+  src: url('../fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+
+/* 코드 전용 모노 (선택) — Google Fonts에서 로드, 실패 시 시스템 모노 폴백 */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
